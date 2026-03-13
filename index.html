@@ -289,12 +289,10 @@ function callBackend(userMessage, callback) {
     }).catch(function(err) { callback(err, null); });
 }
 
-// ── UI ────────────────────────────────────────────────────────────────────
+// ── UI ───────────────────────────────────────────────────────────────────
 function activateLumin() {
-    var nameVal = document.getElementById("name-input").value.trim();
-    var passVal = document.getElementById("pass-input").value.trim().toLowerCase();
-    var errEl   = document.getElementById("setup-error");
-
+    alert("Button pressed - name: " + document.getElementById("name-input").value);
+    
     if (!nameVal) { errEl.textContent = "Please enter your name."; return; }
 
     if (nameVal.toLowerCase() === CREATOR_NAME) {
