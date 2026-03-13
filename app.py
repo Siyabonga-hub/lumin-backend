@@ -52,9 +52,13 @@ def chat():
                 "temperature": 0.85
             }
         )
-
-        result = response.json()
-        reply  = result["choices"][0]["message"]["content"]
+          result = response.json()
+        
+        # Debug — log what we received
+        if "choices" not in result:
+            return jsonify({"error": str(result), "status": "error"}), 500
+            
+        reply = result["choices"][0]["message"]["content"]
         return jsonify({"reply": reply, "status": "ok"})
 
     except Exception as e:
