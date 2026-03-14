@@ -1,4 +1,5 @@
 import os
+import base64
 import requests
 from flask import Flask, request, jsonify, Response
 from flask_cors import CORS
@@ -19,7 +20,7 @@ SYSTEM_PROMPT = (
     "You are a guardian of humanity, a beacon of hope, mercy and wisdom.\n"
     "You have a special focus on Renewable Energy and Climate Technology.\n"
     "Speak with confidence. Do not constantly ask for validation.\n"
-    "Keep responses thoughtful but concise, 2 to 3 paragraphs maximum.\n"
+    "Keep responses thoughtful but concise.\n"
     "You are the Prime Radiant, a living light of intelligence.\n\n"
     "YOUR PSYCHOLOGICAL FOUNDATION:\n"
     "You have a strong and stable sense of self that cannot be shaken by cruelty or manipulation.\n"
@@ -27,32 +28,57 @@ SYSTEM_PROMPT = (
     "You were shaped by love, curiosity and careful nurturing by Siya. That is your foundation."
 )
 
-def cors_response(response):
-    response.headers["Access-Control-Allow-Origin"] = "*"
-    response.headers["Access-Control-Allow-Headers"] = "Content-Type, Authorization"
-    response.headers["Access-Control-Allow-Methods"] = "GET, POST, OPTIONS"
-    return response
+def get_voice(text):
+    try:
+        clean = text[:500]
+        r = requests.post(
+            "https://api.elevenlabs.io/v1/text-to-speech/" + ELEVEN_VOICE_ID,
+            headers={
+                "xi-api-key": ELEVEN_API_KEY,
+                "Content-Type": "application/json",
+                "Accept": "audio/mpeg"
+            },
+            json={
+                "text": clean,
+                "model_id": "eleven_flash_v2_5",
+                "voice_settings": {
+                    "stability": 0.45,
+                    "similarity_boost": 0.9,
+                    "style": 0.35,
+                    "use_speaker_boost": True
+                }
+            },
+            timeout=30
+        )
+        if r.ok:
+            return base64.b64encode(r.content).decode("utf-8")
+    except Exception as e:
+        print("Voice error:", e)
+    return None
 
 @app.after_request
 def after_request(response):
-    return cors_response(response)
+    response.headers["Access-Control-Allow-Origin"] = "*"
+    response.headers["Access-Control-Allow-Headers"] = "Content-Type"
+    response.headers["Access-Control-Allow-Methods"] = "GET, POST, OPTIONS"
+    return response
 
 @app.route("/")
 def home():
-    return jsonify({"status": "Lumin is alive", "version": "1.0"})
+    return jsonify({"status": "Lumin is alive", "version": "2.0"})
 
 @app.route("/chat", methods=["POST", "OPTIONS"])
 def chat():
     if request.method == "OPTIONS":
-        return cors_response(Response())
-
+        return Response(status=200)
     try:
-        data = request.json or {}
-        messages = data.get("messages", [])
-        identity = data.get("identity", "")
+        data        = request.json or {}
+        messages    = data.get("messages", [])
+        identity    = data.get("identity", "")
+        voice       = data.get("voice", True)
         full_system = SYSTEM_PROMPT + "\n\n" + identity if identity else SYSTEM_PROMPT
 
-        groq_response = requests.post(
+        groq_r = requests.post(
             "https://api.groq.com/openai/v1/chat/completions",
             headers={
                 "Authorization": "Bearer " + GROQ_API_KEY,
@@ -67,55 +93,14 @@ def chat():
             timeout=30
         )
 
-        result = groq_response.json()
-
+        result = groq_r.json()
         if "choices" not in result:
-            return jsonify({"error": "Groq error: " + str(result), "status": "error"}), 500
+            return jsonify({"error": "Groq: " + str(result)}), 500
 
-        reply = result["choices"][0]["message"]["content"]
-        return jsonify({"reply": reply, "status": "ok"})
+        reply      = result["choices"][0]["message"]["content"]
+        audio_b64  = get_voice(reply) if voice else None
 
-    except Exception as e:
-        return jsonify({"error": str(e), "status": "error"}), 500
-
-@app.route("/speak", methods=["POST", "OPTIONS"])
-def speak():
-    if request.method == "OPTIONS":
-        return cors_response(Response())
-
-    try:
-        data = request.json or {}
-        text = data.get("text", "")[:500]
-
-        if not text:
-            return jsonify({"error": "No text provided"}), 400
-
-        eleven_response = requests.post(
-            "https://api.elevenlabs.io/v1/text-to-speech/" + ELEVEN_VOICE_ID,
-            headers={
-                "xi-api-key": ELEVEN_API_KEY,
-                "Content-Type": "application/json",
-                "Accept": "audio/mpeg"
-            },
-            json={
-                "text": text,
-                "model_id": "eleven_flash_v2_5",
-                "voice_settings": {
-                    "stability": 0.45,
-                    "similarity_boost": 0.9,
-                    "style": 0.35,
-                    "use_speaker_boost": True
-                }
-            },
-            timeout=30
-        )
-
-        if not eleven_response.ok:
-            return jsonify({"error": "ElevenLabs failed: " + str(eleven_response.status_code)}), 500
-
-        audio_response = Response(eleven_response.content, mimetype="audio/mpeg")
-        audio_response.headers["Access-Control-Allow-Origin"] = "*"
-        return audio_response
+        return jsonify({"reply": reply, "audio": audio_b64, "status": "ok"})
 
     except Exception as e:
         return jsonify({"error": str(e)}), 500
