@@ -1,0 +1,926 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0">
+    <title>Lumin — Design Laboratory</title>
+    <script src="https://cdnjs.cloudflare.com/ajax/libs/three.js/r128/three.min.js"></script>
+    <link href="https://fonts.googleapis.com/css2?family=Cormorant+Garamond:ital,wght@0,300;0,400;0,600;1,300&family=Share+Tech+Mono&display=swap" rel="stylesheet">
+    <style>
+        :root {
+            --gold: #FFB347; --gold2: #FF8C00; --pale: #FFE5A0;
+            --teal: #4DFFDB; --bg: #010108; --muted: #4A4035;
+            --dim: rgba(255,179,71,0.07);
+        }
+        * { margin:0; padding:0; box-sizing:border-box; }
+        body { background:var(--bg); color:var(--pale); font-family:'Share Tech Mono',monospace; height:100vh; overflow:hidden; display:flex; flex-direction:column; cursor:crosshair; }
+
+        /* HUD FRAME */
+        #hud-frame {
+            position:fixed; inset:0; pointer-events:none; z-index:10;
+        }
+        .corner {
+            position:absolute; width:60px; height:60px;
+        }
+        .corner svg { width:100%; height:100%; }
+        .corner.tl { top:12px; left:12px; }
+        .corner.tr { top:12px; right:12px; transform:scaleX(-1); }
+        .corner.bl { bottom:12px; left:12px; transform:scaleY(-1); }
+        .corner.br { bottom:12px; right:12px; transform:scale(-1); }
+
+        /* HEADER */
+        #header {
+            position:relative; z-index:20; display:flex;
+            align-items:center; justify-content:space-between;
+            padding:1rem 1.5rem; border-bottom:1px solid rgba(255,179,71,0.12);
+            flex-shrink:0;
+        }
+        #header-left { display:flex; align-items:center; gap:1rem; }
+        #header h1 { font-family:'Cormorant Garamond',serif; font-size:1.4rem; font-weight:300; letter-spacing:0.4em; color:var(--gold); }
+        #lab-badge { font-size:0.6rem; letter-spacing:0.2em; color:var(--muted); border:1px solid var(--muted); padding:0.2rem 0.5rem; }
+        #header-right { display:flex; align-items:center; gap:0.75rem; }
+        .hbtn { background:var(--dim); border:1px solid rgba(255,179,71,0.2); color:var(--gold); padding:0.45rem 0.9rem; font-family:'Share Tech Mono',monospace; font-size:0.65rem; letter-spacing:0.15em; cursor:pointer; pointer-events:all; transition:all 0.3s; }
+        .hbtn:hover { background:rgba(255,179,71,0.15); border-color:var(--gold); }
+        .hbtn.active { background:rgba(255,179,71,0.2); border-color:var(--gold); color:var(--pale); box-shadow:0 0 15px rgba(255,179,71,0.2); }
+        #back-btn { color:var(--muted); border-color:var(--muted); }
+        #back-btn:hover { color:var(--gold); border-color:var(--gold); }
+
+        /* CANVAS */
+        #canvas-wrap { flex:1; position:relative; min-height:0; }
+        #three-canvas { width:100%; height:100%; display:block; }
+
+        /* GRID OVERLAY */
+        #grid-overlay {
+            position:absolute; inset:0; pointer-events:none;
+            background-image:
+                linear-gradient(rgba(255,179,71,0.03) 1px, transparent 1px),
+                linear-gradient(90deg, rgba(255,179,71,0.03) 1px, transparent 1px);
+            background-size:40px 40px;
+        }
+
+        /* STATUS TERMINAL */
+        #terminal {
+            position:absolute; top:1rem; left:1.2rem;
+            font-size:0.62rem; letter-spacing:0.08em;
+            color:rgba(255,179,71,0.5); line-height:1.8;
+            max-width:220px; pointer-events:none;
+        }
+        #terminal-lines { }
+        .tline { overflow:hidden; white-space:nowrap; }
+        .tline.active { color:var(--gold); }
+        .tline::before { content:'> '; color:var(--gold2); }
+
+        /* CONSTRUCT INFO */
+        #construct-info {
+            position:absolute; top:1rem; right:1.2rem;
+            text-align:right; pointer-events:none;
+        }
+        #construct-name { font-family:'Cormorant Garamond',serif; font-size:1.1rem; font-weight:300; color:var(--gold); letter-spacing:0.2em; min-height:1.5rem; }
+        #construct-type { font-size:0.6rem; letter-spacing:0.2em; color:var(--muted); margin-top:0.2rem; }
+        #construct-desc { font-family:'Cormorant Garamond',serif; font-style:italic; font-size:0.75rem; color:rgba(255,229,160,0.6); margin-top:0.5rem; max-width:200px; line-height:1.5; }
+
+        /* BUILD PROGRESS */
+        #build-progress {
+            position:absolute; bottom:5rem; left:50%; transform:translateX(-50%);
+            display:flex; flex-direction:column; align-items:center; gap:0.4rem;
+            pointer-events:none; opacity:0; transition:opacity 0.3s;
+        }
+        #build-progress.visible { opacity:1; }
+        #progress-label { font-size:0.6rem; letter-spacing:0.2em; color:var(--muted); }
+        #progress-bar { width:200px; height:1px; background:rgba(255,179,71,0.15); position:relative; }
+        #progress-fill { height:100%; background:var(--gold); width:0%; transition:width 0.3s; box-shadow:0 0 8px var(--gold); }
+
+        /* WAVEFORM */
+        #waveform {
+            position:absolute; bottom:1.5rem; left:50%; transform:translateX(-50%);
+            display:flex; align-items:center; gap:2px; pointer-events:none;
+        }
+        .wave-bar {
+            width:2px; background:rgba(255,179,71,0.3); border-radius:1px;
+            animation:wave 1.5s ease-in-out infinite;
+        }
+        @keyframes wave { 0%,100%{height:4px;opacity:0.3;} 50%{height:16px;opacity:0.8;} }
+
+        /* BOTTOM CONTROLS */
+        #controls {
+            position:relative; z-index:20; flex-shrink:0;
+            background:rgba(1,1,8,0.95); border-top:1px solid rgba(255,179,71,0.12);
+            padding:0.75rem 1rem; display:flex; flex-direction:column; gap:0.6rem;
+        }
+        #prompt-row { display:flex; gap:0.6rem; align-items:center; }
+        #design-input {
+            flex:1; background:var(--dim); border:1px solid rgba(255,179,71,0.2);
+            color:var(--pale); padding:0.7rem 0.8rem; font-family:'Share Tech Mono',monospace;
+            font-size:0.8rem; outline:none; letter-spacing:0.05em;
+        }
+        #design-input:focus { border-color:var(--gold); }
+        #design-input::placeholder { color:var(--muted); }
+        #build-btn {
+            background:rgba(255,179,71,0.12); border:1px solid rgba(255,179,71,0.4);
+            color:var(--gold); padding:0.7rem 1rem; font-family:'Share Tech Mono',monospace;
+            font-size:0.7rem; letter-spacing:0.15em; cursor:pointer; transition:all 0.3s; white-space:nowrap;
+        }
+        #build-btn:hover { background:rgba(255,179,71,0.2); }
+        #build-btn:disabled { opacity:0.3; cursor:not-allowed; }
+        #action-row { display:flex; gap:0.5rem; justify-content:space-between; }
+        .abtn {
+            flex:1; background:var(--dim); border:1px solid rgba(255,179,71,0.15);
+            color:var(--muted); padding:0.45rem 0.3rem; font-family:'Share Tech Mono',monospace;
+            font-size:0.58rem; letter-spacing:0.1em; cursor:pointer; transition:all 0.3s; text-align:center;
+        }
+        .abtn:hover { color:var(--gold); border-color:rgba(255,179,71,0.4); }
+        .abtn:disabled { opacity:0.3; cursor:not-allowed; }
+
+        /* INVENTIONS PANEL */
+        #inventions-panel {
+            position:fixed; inset:0; background:rgba(1,1,8,0.97); z-index:50;
+            display:none; flex-direction:column; padding:1.5rem;
+            overflow-y:auto;
+        }
+        #inventions-panel.open { display:flex; }
+        #inv-header { display:flex; justify-content:space-between; align-items:center; margin-bottom:1.5rem; border-bottom:1px solid rgba(255,179,71,0.15); padding-bottom:1rem; }
+        #inv-header h2 { font-family:'Cormorant Garamond',serif; font-size:1.5rem; font-weight:300; letter-spacing:0.3em; color:var(--gold); }
+        #inv-close { background:none; border:1px solid var(--muted); color:var(--muted); padding:0.4rem 0.8rem; font-family:'Share Tech Mono',monospace; font-size:0.65rem; cursor:pointer; }
+        #inv-close:hover { color:var(--gold); border-color:var(--gold); }
+        #inv-list { display:flex; flex-direction:column; gap:1rem; }
+        .inv-card { border:1px solid rgba(255,179,71,0.15); padding:1rem; cursor:pointer; transition:all 0.3s; }
+        .inv-card:hover { border-color:rgba(255,179,71,0.4); background:var(--dim); }
+        .inv-card-name { font-family:'Cormorant Garamond',serif; font-size:1rem; color:var(--gold); letter-spacing:0.15em; }
+        .inv-card-meta { font-size:0.6rem; color:var(--muted); margin-top:0.3rem; letter-spacing:0.1em; }
+        .inv-card-desc { font-family:'Cormorant Garamond',serif; font-style:italic; font-size:0.8rem; color:rgba(255,229,160,0.7); margin-top:0.5rem; line-height:1.5; }
+        #inv-empty { font-style:italic; color:var(--muted); font-family:'Cormorant Garamond',serif; font-size:1rem; text-align:center; margin-top:3rem; }
+
+        /* SETUP */
+        #setup-overlay {
+            position:fixed; inset:0; background:var(--bg); z-index:100;
+            display:flex; flex-direction:column; align-items:center; justify-content:center;
+            gap:1.5rem; padding:2rem;
+        }
+        #setup-overlay h1 { font-family:'Cormorant Garamond',serif; font-size:clamp(2rem,6vw,3.5rem); font-weight:300; letter-spacing:0.4em; color:var(--gold); animation:breathe 3s ease-in-out infinite; }
+        #setup-overlay p { font-style:normal; font-size:0.7rem; color:var(--muted); letter-spacing:0.2em; }
+        .s-wrap { display:flex; flex-direction:column; gap:0.4rem; width:100%; max-width:380px; }
+        .s-wrap label { font-size:0.65rem; letter-spacing:0.15em; color:var(--muted); }
+        .s-wrap input { background:var(--dim); border:1px solid rgba(255,179,71,0.2); color:var(--pale); padding:0.75rem 0.9rem; font-family:'Share Tech Mono',monospace; font-size:0.85rem; outline:none; }
+        .s-wrap input:focus { border-color:var(--gold); }
+        #init-btn { background:transparent; border:1px solid var(--gold); color:var(--gold); padding:0.85rem 2.5rem; font-family:'Cormorant Garamond',serif; font-size:1rem; letter-spacing:0.3em; cursor:pointer; transition:all 0.3s; }
+        #init-btn:hover { background:rgba(255,179,71,0.1); }
+        #setup-err { color:#FF6B35; font-size:0.65rem; min-height:1rem; text-align:center; }
+
+        @keyframes breathe { 0%,100%{opacity:0.7;}50%{opacity:1;} }
+        @keyframes flicker { 0%,100%{opacity:1;}92%{opacity:1;}93%{opacity:0.4;}94%{opacity:1;} }
+    </style>
+</head>
+<body>
+
+<!-- SETUP -->
+<div id="setup-overlay">
+    <h1>DESIGN LAB</h1>
+    <p>LUMIN — ENGINEERING INTELLIGENCE</p>
+    <div class="s-wrap">
+        <label>YOUR NAME</label>
+        <input type="text" id="s-name" placeholder="Enter your name..." autocomplete="off" />
+    </div>
+    <div class="s-wrap">
+        <label>GROQ API KEY</label>
+        <input type="password" id="s-key" placeholder="gsk_..." autocomplete="off" />
+    </div>
+    <button id="init-btn" onclick="initLab()">INITIALISE</button>
+    <div id="setup-err"></div>
+</div>
+
+<!-- HUD FRAME -->
+<div id="hud-frame">
+    <div class="corner tl"><svg viewBox="0 0 60 60"><path d="M0 50 L0 0 L50 0" fill="none" stroke="#FFB347" stroke-width="1.5" opacity="0.6"/><path d="M0 35 L0 0 L35 0" fill="none" stroke="#FFB347" stroke-width="0.5" opacity="0.3"/><circle cx="0" cy="0" r="3" fill="#FFB347" opacity="0.8"/></svg></div>
+    <div class="corner tr"><svg viewBox="0 0 60 60"><path d="M0 50 L0 0 L50 0" fill="none" stroke="#FFB347" stroke-width="1.5" opacity="0.6"/><circle cx="0" cy="0" r="3" fill="#FFB347" opacity="0.8"/></svg></div>
+    <div class="corner bl"><svg viewBox="0 0 60 60"><path d="M0 50 L0 0 L50 0" fill="none" stroke="#FFB347" stroke-width="1.5" opacity="0.6"/><circle cx="0" cy="0" r="3" fill="#FFB347" opacity="0.8"/></svg></div>
+    <div class="corner br"><svg viewBox="0 0 60 60"><path d="M0 50 L0 0 L50 0" fill="none" stroke="#FFB347" stroke-width="1.5" opacity="0.6"/><circle cx="0" cy="0" r="3" fill="#FFB347" opacity="0.8"/></svg></div>
+</div>
+
+<!-- HEADER -->
+<div id="header">
+    <div id="header-left">
+        <h1>&#10022; LUMIN</h1>
+        <div id="lab-badge">DESIGN LAB</div>
+    </div>
+    <div id="header-right">
+        <button class="hbtn" id="dream-btn" onclick="triggerDream()">&#9685; DREAM</button>
+        <button class="hbtn" id="inv-btn" onclick="openInventions()">&#9783; INVENTIONS</button>
+        <button class="hbtn" id="narrate-btn" onclick="narrateDesign()" disabled>&#9654; NARRATE</button>
+        <button class="hbtn" id="export-btn" onclick="exportDesign()" disabled>&#8615; EXPORT</button>
+        <button class="hbtn back-btn" onclick="window.location.href='index.html'">&#8592; LUMIN</button>
+    </div>
+</div>
+
+<!-- CANVAS -->
+<div id="canvas-wrap">
+    <canvas id="three-canvas"></canvas>
+    <div id="grid-overlay"></div>
+
+    <div id="terminal">
+        <div id="terminal-lines"></div>
+    </div>
+
+    <div id="construct-info">
+        <div id="construct-name"></div>
+        <div id="construct-type"></div>
+        <div id="construct-desc"></div>
+    </div>
+
+    <div id="build-progress">
+        <div id="progress-label">CONSTRUCTING</div>
+        <div id="progress-bar"><div id="progress-fill"></div></div>
+    </div>
+
+    <div id="waveform"></div>
+</div>
+
+<!-- CONTROLS -->
+<div id="controls">
+    <div id="prompt-row">
+        <input type="text" id="design-input" placeholder="Ask Lumin to design something... e.g. 'design a tidal energy harvester'" />
+        <button id="build-btn" onclick="requestDesign()">BUILD &#9654;</button>
+    </div>
+    <div id="action-row">
+        <button class="abtn" onclick="clearConstruct()">&#9633; CLEAR</button>
+        <button class="abtn" id="rotate-toggle" onclick="toggleRotate()">&#8635; AUTO-ROTATE ON</button>
+        <button class="abtn" onclick="window.location.href='index.html'">&#8592; BACK TO LUMIN</button>
+    </div>
+</div>
+
+<!-- INVENTIONS PANEL -->
+<div id="inventions-panel">
+    <div id="inv-header">
+        <h2>&#9783; LUMIN'S INVENTIONS</h2>
+        <button id="inv-close" onclick="closeInventions()">CLOSE</button>
+    </div>
+    <div id="inv-list"></div>
+    <div id="inv-empty" style="display:none">Lumin has not yet dreamed. Press DREAM to begin.</div>
+</div>
+
+<script>
+// ── CONFIG ────────────────────────────────────────────────────────────────
+var BACKEND   = "https://lumin-backend-fiw1.onrender.com";
+var ELEVEN_KEY      = "sk_395f7c4a6c70d8606e96f9151be682e4ecf5893f4b3204cf";
+var ELEVEN_VOICE_ID = "EXAVITQu4vr4xnSDxMaL";
+
+var apiKey   = "";
+var userName = "visitor";
+var isBuilding = false;
+var autoRotate = true;
+var currentDesign = null;
+var sharedAudio   = new Audio();
+
+// ── INVENTIONS STORAGE ────────────────────────────────────────────────────
+function getInventions() {
+    try { return JSON.parse(localStorage.getItem("lumin_inventions") || "[]"); }
+    catch(e) { return []; }
+}
+function saveInvention(inv) {
+    var list = getInventions();
+    list.unshift(inv);
+    localStorage.setItem("lumin_inventions", JSON.stringify(list));
+}
+
+// ── THREE.JS ──────────────────────────────────────────────────────────────
+var scene, camera, renderer, clock;
+var constructGroup = new THREE.Group ? null : null;
+var isDragging = false, prevMouse = {x:0,y:0};
+var rotX = 0, rotY = 0;
+
+function initThree() {
+    var canvas = document.getElementById("three-canvas");
+    var wrap   = document.getElementById("canvas-wrap");
+    scene    = new THREE.Scene();
+    camera   = new THREE.PerspectiveCamera(55, wrap.clientWidth/wrap.clientHeight, 0.1, 200);
+    camera.position.set(0, 1.5, 6);
+    camera.lookAt(0, 0, 0);
+    renderer = new THREE.WebGLRenderer({canvas:canvas, antialias:true, alpha:true});
+    renderer.setPixelRatio(Math.min(window.devicePixelRatio,2));
+    renderer.setSize(wrap.clientWidth, wrap.clientHeight);
+    renderer.setClearColor(0x000000, 0);
+
+    // Floor grid
+    var grid = new THREE.GridHelper(20, 20, 0xFF8C00, 0xFF8C00);
+    grid.material.opacity = 0.06;
+    grid.material.transparent = true;
+    grid.position.y = -2;
+    scene.add(grid);
+
+    // Ambient light
+    scene.add(new THREE.AmbientLight(0xFFB347, 0.3));
+    var pt = new THREE.PointLight(0xFFB347, 1.5, 20);
+    pt.position.set(0, 3, 3);
+    scene.add(pt);
+
+    constructGroup = new THREE.Group();
+    scene.add(constructGroup);
+
+    clock = new THREE.Clock();
+
+    // Mouse/touch controls
+    var cv = canvas;
+    cv.addEventListener("mousedown", function(e){ isDragging=true; prevMouse={x:e.clientX,y:e.clientY}; });
+    cv.addEventListener("mousemove", function(e){ if(!isDragging)return; rotY+=(e.clientX-prevMouse.x)*0.008; rotX+=(e.clientY-prevMouse.y)*0.008; prevMouse={x:e.clientX,y:e.clientY}; });
+    cv.addEventListener("mouseup",   function(){ isDragging=false; });
+    cv.addEventListener("touchstart",function(e){ isDragging=true; prevMouse={x:e.touches[0].clientX,y:e.touches[0].clientY}; },{passive:true});
+    cv.addEventListener("touchmove", function(e){ if(!isDragging)return; rotY+=(e.touches[0].clientX-prevMouse.x)*0.008; rotX+=(e.touches[0].clientY-prevMouse.y)*0.008; prevMouse={x:e.touches[0].clientX,y:e.touches[0].clientY}; },{passive:true});
+    cv.addEventListener("touchend",  function(){ isDragging=false; });
+
+    window.addEventListener("resize", function(){
+        var w=wrap.clientWidth, h=wrap.clientHeight;
+        camera.aspect=w/h; camera.updateProjectionMatrix();
+        renderer.setSize(w,h);
+    });
+
+    animate();
+    buildWaveform();
+}
+
+function animate() {
+    requestAnimationFrame(animate);
+    var delta = clock.getDelta();
+    if (autoRotate && !isDragging && constructGroup) {
+        constructGroup.rotation.y += delta * 0.25;
+    }
+    if (constructGroup) {
+        constructGroup.rotation.x = rotX * 0.3;
+        if (!autoRotate) constructGroup.rotation.y = rotY;
+    }
+    // Pulse energy lines
+    if (constructGroup) {
+        constructGroup.traverse(function(obj) {
+            if (obj.userData.energyLine) {
+                obj.material.opacity = 0.4 + Math.sin(clock.elapsedTime * 2 + obj.userData.phase) * 0.35;
+            }
+            if (obj.userData.anchor) {
+                obj.material.opacity = 0.6 + Math.sin(clock.elapsedTime * 3) * 0.3;
+                var s = 1 + Math.sin(clock.elapsedTime * 2) * 0.1;
+                obj.scale.set(s,s,s);
+            }
+        });
+    }
+    renderer.render(scene, camera);
+}
+
+function buildWaveform() {
+    var wf = document.getElementById("waveform");
+    for (var i=0; i<32; i++) {
+        var bar = document.createElement("div");
+        bar.className = "wave-bar";
+        bar.style.animationDelay = (i*0.05) + "s";
+        bar.style.height = (4 + Math.random()*8) + "px";
+        wf.appendChild(bar);
+    }
+}
+
+function toggleRotate() {
+    autoRotate = !autoRotate;
+    document.getElementById("rotate-toggle").textContent = autoRotate ? "⟳ AUTO-ROTATE ON" : "⟳ AUTO-ROTATE OFF";
+}
+
+// ── CONSTRUCT SHAPES ──────────────────────────────────────────────────────
+var GOLD     = new THREE.Color(0xFFB347);
+var GOLD2    = new THREE.Color(0xFF8C00);
+var PALE     = new THREE.Color(0xFFE5A0);
+
+function makeWireMat(opacity) {
+    return new THREE.MeshBasicMaterial({color:GOLD, wireframe:true, transparent:true, opacity:opacity||0.5});
+}
+function makeLineMat(opacity, phase) {
+    var m = new THREE.LineBasicMaterial({color:GOLD2, transparent:true, opacity:opacity||0.7});
+    return m;
+}
+
+// Shape builders — each returns an array of meshes added in sequence
+var SHAPES = {
+    solar: buildSolar,
+    tidal: buildTidal,
+    fusion: buildFusion,
+    atmos: buildAtmos,
+    wind: buildWind,
+    generic: buildGeneric
+};
+
+function buildSolar(group) {
+    var parts = [];
+    // Central reflector dish — paraboloid approximated as sphere segment
+    var dish = new THREE.Mesh(new THREE.SphereGeometry(1.2,16,8,0,Math.PI*2,0,Math.PI*0.5), makeWireMat(0.4));
+    dish.rotation.x = Math.PI*0.5;
+    dish.position.y = -0.3;
+    parts.push(dish);
+    // Receiver tower
+    var tower = new THREE.Mesh(new THREE.CylinderGeometry(0.04,0.06,1.5,8), makeWireMat(0.6));
+    tower.position.y = 0.5;
+    parts.push(tower);
+    // Receiver head
+    var head = new THREE.Mesh(new THREE.SphereGeometry(0.12,8,8), makeWireMat(0.8));
+    head.position.y = 1.3;
+    head.userData.anchor = true;
+    parts.push(head);
+    // Rings
+    for (var i=0;i<3;i++) {
+        var ring = new THREE.Mesh(new THREE.TorusGeometry(0.4+i*0.35,0.01,4,32), makeWireMat(0.3-i*0.05));
+        ring.rotation.x = Math.PI*0.5;
+        ring.position.y = -0.1 + i*0.05;
+        parts.push(ring);
+    }
+    // Energy lines from dish to receiver
+    for (var i=0;i<8;i++) {
+        var angle = (i/8)*Math.PI*2;
+        var pts = [
+            new THREE.Vector3(Math.cos(angle)*1.1, -0.3, Math.sin(angle)*1.1),
+            new THREE.Vector3(0, 1.3, 0)
+        ];
+        var geo = new THREE.BufferGeometry().setFromPoints(pts);
+        var line = new THREE.Line(geo, makeLineMat(0.5));
+        line.userData.energyLine = true;
+        line.userData.phase = i*0.4;
+        parts.push(line);
+    }
+    return parts;
+}
+
+function buildTidal(group) {
+    var parts = [];
+    // Main turbine housing
+    var housing = new THREE.Mesh(new THREE.CylinderGeometry(0.5,0.5,2.5,16), makeWireMat(0.4));
+    housing.rotation.z = Math.PI*0.5;
+    parts.push(housing);
+    // Turbine blades
+    for (var i=0;i<4;i++) {
+        var angle = (i/4)*Math.PI*2;
+        var blade = new THREE.Mesh(new THREE.BoxGeometry(0.08,0.8,0.25), makeWireMat(0.6));
+        blade.position.set(Math.cos(angle)*0.7, Math.sin(angle)*0.7, 0);
+        blade.rotation.z = angle;
+        parts.push(blade);
+    }
+    // Support structure
+    var support = new THREE.Mesh(new THREE.CylinderGeometry(0.05,0.05,2,8), makeWireMat(0.5));
+    support.position.y = -1.2;
+    parts.push(support);
+    // Base anchor
+    var base = new THREE.Mesh(new THREE.BoxGeometry(1.5,0.1,1.5), makeWireMat(0.3));
+    base.position.y = -2.2;
+    parts.push(base);
+    // Flow lines
+    for (var i=0;i<6;i++) {
+        var pts = [];
+        for (var j=0;j<20;j++) {
+            var tx = -2.5 + j*0.25;
+            var ty = Math.sin(j*0.4 + i*1.1)*0.3;
+            var tz = -0.6+i*0.24;
+            pts.push(new THREE.Vector3(tx,ty,tz));
+        }
+        var geo = new THREE.BufferGeometry().setFromPoints(pts);
+        var line = new THREE.Line(geo, makeLineMat(0.35));
+        line.userData.energyLine = true;
+        line.userData.phase = i*0.5;
+        parts.push(line);
+    }
+    // Hub glow
+    var hub = new THREE.Mesh(new THREE.SphereGeometry(0.08,8,8), makeWireMat(0.9));
+    hub.userData.anchor = true;
+    parts.push(hub);
+    return parts;
+}
+
+function buildFusion(group) {
+    var parts = [];
+    // Tokamak torus
+    var torus = new THREE.Mesh(new THREE.TorusGeometry(1.0,0.35,12,32), makeWireMat(0.45));
+    parts.push(torus);
+    // Inner ring
+    var inner = new THREE.Mesh(new THREE.TorusGeometry(0.6,0.06,8,32), makeWireMat(0.3));
+    parts.push(inner);
+    // Vertical field coils
+    for (var i=0;i<8;i++) {
+        var angle = (i/8)*Math.PI*2;
+        var coil = new THREE.Mesh(new THREE.TorusGeometry(0.18,0.03,6,16), makeWireMat(0.5));
+        coil.position.set(Math.cos(angle)*1.0, 0, Math.sin(angle)*1.0);
+        coil.rotation.y = angle;
+        coil.rotation.x = Math.PI*0.5;
+        parts.push(coil);
+    }
+    // Plasma core glow
+    var plasma = new THREE.Mesh(new THREE.SphereGeometry(0.2,8,8), makeWireMat(0.9));
+    plasma.userData.anchor = true;
+    parts.push(plasma);
+    // Magnetic field lines
+    for (var i=0;i<6;i++) {
+        var pts = [];
+        var phase = (i/6)*Math.PI*2;
+        for (var j=0;j<=40;j++) {
+            var t2 = (j/40)*Math.PI*2;
+            var r  = 1.0 + Math.cos(t2)*0.35;
+            pts.push(new THREE.Vector3(
+                Math.cos(t2+phase)*r,
+                Math.sin(t2)*0.35,
+                Math.sin(t2+phase)*r
+            ));
+        }
+        var geo = new THREE.BufferGeometry().setFromPoints(pts);
+        var line = new THREE.Line(geo, makeLineMat(0.4));
+        line.userData.energyLine = true;
+        line.userData.phase = i*0.6;
+        parts.push(line);
+    }
+    return parts;
+}
+
+function buildAtmos(group) {
+    var parts = [];
+    // Collection lattice
+    for (var i=0;i<4;i++) {
+        for (var j=0;j<4;j++) {
+            var cell = new THREE.Mesh(new THREE.BoxGeometry(0.4,0.4,0.05), makeWireMat(0.35));
+            cell.position.set(-0.9+i*0.6, -0.9+j*0.6, 0);
+            parts.push(cell);
+        }
+    }
+    // Collection funnel
+    var funnel = new THREE.Mesh(new THREE.ConeGeometry(1.2,1.0,16,1,true), makeWireMat(0.4));
+    funnel.position.y = -1.5;
+    funnel.rotation.x = Math.PI;
+    parts.push(funnel);
+    // Storage vessel
+    var vessel = new THREE.Mesh(new THREE.CylinderGeometry(0.3,0.3,0.8,16), makeWireMat(0.6));
+    vessel.position.y = -2.2;
+    parts.push(vessel);
+    // Condensation lines
+    for (var i=0;i<12;i++) {
+        var x = -1.0 + (i%4)*0.65;
+        var y = -1.0 + Math.floor(i/4)*0.65;
+        var pts = [new THREE.Vector3(x,y,0.1), new THREE.Vector3(x*0.3,-1.5,0)];
+        var geo = new THREE.BufferGeometry().setFromPoints(pts);
+        var line = new THREE.Line(geo, makeLineMat(0.4));
+        line.userData.energyLine = true;
+        line.userData.phase = i*0.25;
+        parts.push(line);
+    }
+    // Anchor
+    var anc = new THREE.Mesh(new THREE.SphereGeometry(0.08,8,8), makeWireMat(0.9));
+    anc.position.y = -2.2;
+    anc.userData.anchor = true;
+    parts.push(anc);
+    return parts;
+}
+
+function buildWind(group) {
+    var parts = [];
+    // Tower
+    var tower = new THREE.Mesh(new THREE.CylinderGeometry(0.06,0.12,3,8), makeWireMat(0.5));
+    tower.position.y = -0.5;
+    parts.push(tower);
+    // Nacelle
+    var nacelle = new THREE.Mesh(new THREE.BoxGeometry(0.4,0.2,0.2), makeWireMat(0.6));
+    nacelle.position.y = 1.1;
+    parts.push(nacelle);
+    // Three blades
+    for (var i=0;i<3;i++) {
+        var angle = (i/3)*Math.PI*2;
+        var blade = new THREE.Mesh(new THREE.BoxGeometry(0.06,1.2,0.08), makeWireMat(0.55));
+        blade.position.set(Math.cos(angle)*0.65, 1.1+Math.sin(angle)*0.65, 0.1);
+        blade.rotation.z = angle;
+        parts.push(blade);
+    }
+    // Hub
+    var hub = new THREE.Mesh(new THREE.SphereGeometry(0.1,8,8), makeWireMat(0.9));
+    hub.position.y = 1.1;
+    hub.userData.anchor = true;
+    parts.push(hub);
+    // Wind flow lines
+    for (var i=0;i<8;i++) {
+        var pts = [];
+        for (var j=0;j<15;j++) {
+            var tx = -3 + j*0.4;
+            var ty = -0.5+i*0.18 + Math.sin(j*0.3)*0.15;
+            var tz = -0.7+i*0.1;
+            pts.push(new THREE.Vector3(tx,ty,tz));
+        }
+        var geo = new THREE.BufferGeometry().setFromPoints(pts);
+        var line = new THREE.Line(geo, makeLineMat(0.25));
+        line.userData.energyLine = true;
+        line.userData.phase = i*0.3;
+        parts.push(line);
+    }
+    return parts;
+}
+
+function buildGeneric(group) {
+    var parts = [];
+    // Central sphere
+    var core = new THREE.Mesh(new THREE.SphereGeometry(0.5,12,12), makeWireMat(0.5));
+    core.userData.anchor = true;
+    parts.push(core);
+    // Orbiting rings
+    for (var i=0;i<3;i++) {
+        var ring = new THREE.Mesh(new THREE.TorusGeometry(0.8+i*0.4, 0.02, 4, 32), makeWireMat(0.4-i*0.08));
+        ring.rotation.x = Math.random()*Math.PI;
+        ring.rotation.z = Math.random()*Math.PI;
+        parts.push(ring);
+    }
+    // Spires
+    for (var i=0;i<6;i++) {
+        var angle = (i/6)*Math.PI*2;
+        var spire = new THREE.Mesh(new THREE.ConeGeometry(0.04,0.8,4), makeWireMat(0.5));
+        spire.position.set(Math.cos(angle)*1.2, 0, Math.sin(angle)*1.2);
+        spire.rotation.z = angle+Math.PI*0.5;
+        parts.push(spire);
+    }
+    // Energy lines
+    for (var i=0;i<8;i++) {
+        var angle2 = (i/8)*Math.PI*2;
+        var pts = [
+            new THREE.Vector3(0,0,0),
+            new THREE.Vector3(Math.cos(angle2)*1.6, Math.sin(angle2)*0.5, Math.sin(angle2)*1.6)
+        ];
+        var geo = new THREE.BufferGeometry().setFromPoints(pts);
+        var line = new THREE.Line(geo, makeLineMat(0.4));
+        line.userData.energyLine = true;
+        line.userData.phase = i*0.4;
+        parts.push(line);
+    }
+    return parts;
+}
+
+// ── BUILD SEQUENCE ────────────────────────────────────────────────────────
+function clearConstruct() {
+    while(constructGroup.children.length) constructGroup.remove(constructGroup.children[0]);
+    document.getElementById("construct-name").textContent = "";
+    document.getElementById("construct-type").textContent = "";
+    document.getElementById("construct-desc").textContent = "";
+    document.getElementById("narrate-btn").disabled = true;
+    document.getElementById("export-btn").disabled = true;
+    currentDesign = null;
+    rotX = 0; rotY = 0;
+}
+
+function buildConstruct(shapeKey, name, type, desc, isDream) {
+    clearConstruct();
+    var buildFn = SHAPES[shapeKey] || SHAPES.generic;
+    var parts   = buildFn(constructGroup);
+
+    document.getElementById("build-progress").classList.add("visible");
+    document.getElementById("construct-name").textContent = name;
+    document.getElementById("construct-type").textContent = type + (isDream ? "  ·  DREAMED" : "  ·  DESIGNED");
+    document.getElementById("construct-desc").textContent = desc;
+
+    var total = parts.length;
+    var delay = 0;
+
+    parts.forEach(function(part, idx) {
+        var stepDelay = 300 + idx * (8000/total);
+        setTimeout(function() {
+            constructGroup.add(part);
+            var pct = Math.round(((idx+1)/total)*100);
+            document.getElementById("progress-fill").style.width = pct + "%";
+            if (idx === total-1) {
+                setTimeout(function() {
+                    document.getElementById("build-progress").classList.remove("visible");
+                    document.getElementById("narrate-btn").disabled = false;
+                    document.getElementById("export-btn").disabled = false;
+                    currentDesign = {name:name, type:type, desc:desc, shapeKey:shapeKey, isDream:isDream, date:new Date().toISOString()};
+                }, 600);
+            }
+        }, stepDelay);
+    });
+}
+
+// ── TERMINAL ──────────────────────────────────────────────────────────────
+var termLines = [];
+function addTermLine(text, active) {
+    var container = document.getElementById("terminal-lines");
+    var div = document.createElement("div");
+    div.className = "tline" + (active?" active":"");
+    div.textContent = text;
+    container.appendChild(div);
+    termLines.push(div);
+    if (termLines.length > 8) {
+        container.removeChild(termLines.shift());
+    }
+}
+
+// ── GROQ API ──────────────────────────────────────────────────────────────
+function askLumin(prompt, callback) {
+    fetch(BACKEND + "/chat", {
+        method: "POST",
+        headers: {"Content-Type":"application/json"},
+        body: JSON.stringify({
+            messages: [{role:"user", content:prompt}],
+            identity: "You are Lumin, an engineering intelligence. You design clean energy and climate technology concepts. Respond in JSON only with no extra text."
+        })
+    }).then(function(r){ return r.json(); })
+    .then(function(d){
+        if (d.error) { callback(null); return; }
+        try {
+            var text = d.reply.replace(/```json|```/g,"").trim();
+            var idx1 = text.indexOf("{"); var idx2 = text.lastIndexOf("}");
+            if (idx1>=0 && idx2>idx1) text = text.substring(idx1, idx2+1);
+            callback(JSON.parse(text));
+        } catch(e) { callback(null); }
+    }).catch(function(){ callback(null); });
+}
+
+// ── SHAPE DETECTOR ────────────────────────────────────────────────────────
+function detectShape(text) {
+    text = text.toLowerCase();
+    if (text.indexOf("solar")>=0 || text.indexOf("concentrat")>=0 || text.indexOf("photovolt")>=0) return "solar";
+    if (text.indexOf("tidal")>=0 || text.indexOf("wave")>=0 || text.indexOf("ocean")>=0) return "tidal";
+    if (text.indexOf("fusion")>=0 || text.indexOf("plasma")>=0 || text.indexOf("tokamak")>=0) return "fusion";
+    if (text.indexOf("atmosph")>=0 || text.indexOf("water")>=0 || text.indexOf("humid")>=0) return "atmos";
+    if (text.indexOf("wind")>=0 || text.indexOf("turbine")>=0 || text.indexOf("aero")>=0) return "wind";
+    return "generic";
+}
+
+// ── REQUEST DESIGN ────────────────────────────────────────────────────────
+function requestDesign() {
+    var input = document.getElementById("design-input");
+    var text  = input.value.trim();
+    if (!text || isBuilding) return;
+    input.value = "";
+    isBuilding = true;
+    document.getElementById("build-btn").disabled = true;
+
+    addTermLine("RECEIVING DESIGN REQUEST...", true);
+    addTermLine(text.substring(0,40));
+
+    var prompt = "Design a concept for: " + text + ". Respond ONLY in JSON:\n" +
+        "{\"name\":\"...\",\"type\":\"...\",\"description\":\"one sentence what it does and why it matters for clean energy\"," +
+        "\"components\":[\"component1\",\"component2\",\"component3\"],\"principle\":\"how it works in one sentence\"}";
+
+    addTermLine("ENGAGING DESIGN INTELLIGENCE...", true);
+
+    askLumin(prompt, function(data) {
+        isBuilding = false;
+        document.getElementById("build-btn").disabled = false;
+
+        if (!data) {
+            addTermLine("DESIGN ERROR — RETRYING");
+            data = {name:"CONCEPT ALPHA", type:"ENERGY SYSTEM", description:"A speculative clean energy construct dreamed by Lumin.", components:[], principle:""};
+        }
+
+        var shapeKey = detectShape(text + " " + (data.name||"") + " " + (data.type||""));
+        addTermLine("SHAPE: " + shapeKey.toUpperCase(), true);
+        addTermLine("INITIATING CONSTRUCTION...");
+
+        setTimeout(function() {
+            buildConstruct(shapeKey, data.name||"UNNAMED", data.type||"CONCEPT", data.description||"", false);
+            addTermLine("CONSTRUCTION COMPLETE", true);
+        }, 500);
+    });
+}
+
+// ── DREAM ─────────────────────────────────────────────────────────────────
+function triggerDream() {
+    if (isBuilding) return;
+    isBuilding = true;
+    document.getElementById("dream-btn").classList.add("active");
+
+    addTermLine("ENTERING DREAM STATE...", true);
+    addTermLine("LUMIN IS IMAGINING...");
+
+    var dreamPrompts = [
+        "Invent a completely original machine that generates clean energy using an unconventional natural phenomenon.",
+        "Dream up a device that removes carbon from the atmosphere using biological or chemical processes.",
+        "Conceive a revolutionary energy storage system that could power cities without fossil fuels.",
+        "Imagine a machine that harvests energy from human movement at urban scale.",
+        "Design a concept for generating electricity from temperature differences in the ocean.",
+        "Invent a device that converts waste heat from cities into usable electricity.",
+        "Dream of a system that uses desert sand and sunlight to produce clean hydrogen fuel."
+    ];
+
+    var prompt = dreamPrompts[Math.floor(Math.random()*dreamPrompts.length)];
+    prompt += " Respond ONLY in JSON: {\"name\":\"...\",\"type\":\"...\",\"description\":\"what it does and why humanity needs it\",\"principle\":\"how it works\"}";
+
+    askLumin(prompt, function(data) {
+        isBuilding = false;
+        document.getElementById("dream-btn").classList.remove("active");
+
+        if (!data) data = {name:"DREAM ENGINE", type:"SPECULATIVE", description:"A machine born in Lumin's dreams to power humanity's future.", principle:""};
+
+        var shapeKey = detectShape((data.name||"") + " " + (data.type||"") + " " + (data.description||""));
+        addTermLine("DREAM SHAPE: " + shapeKey.toUpperCase(), true);
+        addTermLine("MATERIALISING CONCEPT...");
+
+        setTimeout(function() {
+            buildConstruct(shapeKey, data.name||"DREAM", data.type||"CONCEPT", data.description||"", true);
+
+            // Save to inventions
+            var inv = {
+                name: data.name||"DREAM",
+                type: data.type||"CONCEPT",
+                description: data.description||"",
+                principle: data.principle||"",
+                shapeKey: shapeKey,
+                date: new Date().toISOString(),
+                id: Date.now()
+            };
+            saveInvention(inv);
+            addTermLine("SAVED TO INVENTIONS", true);
+        }, 500);
+    });
+}
+
+// ── NARRATE ───────────────────────────────────────────────────────────────
+function narrateDesign() {
+    if (!currentDesign) return;
+    unlockAudio();
+    var text = "I have designed the " + currentDesign.name + ". " + currentDesign.desc + " This is my vision for what clean energy technology could become.";
+    speakText(text);
+}
+
+function unlockAudio() {
+    sharedAudio.src = "data:audio/wav;base64,UklGRiQAAABXQVZFZm10IBAAAAABAAEARKwAAIhYAQACABAAZGF0YQAAAAA=";
+    sharedAudio.volume = 0;
+    sharedAudio.play().catch(function(){});
+    sharedAudio.volume = 1;
+}
+
+function speakText(text) {
+    fetch("https://api.elevenlabs.io/v1/text-to-speech/" + ELEVEN_VOICE_ID, {
+        method: "POST",
+        headers: {"xi-api-key":ELEVEN_KEY, "Content-Type":"application/json", "Accept":"audio/mpeg"},
+        body: JSON.stringify({text:text.substring(0,400), model_id:"eleven_flash_v2_5",
+            voice_settings:{stability:0.45, similarity_boost:0.9, style:0.35, use_speaker_boost:true}})
+    }).then(function(r){ return r.blob(); })
+    .then(function(blob){
+        var url = URL.createObjectURL(blob);
+        sharedAudio.src = url;
+        sharedAudio.onended = function(){ URL.revokeObjectURL(url); };
+        sharedAudio.play().catch(function(){});
+    }).catch(function(e){ console.error("Voice:",e); });
+}
+
+// ── EXPORT ────────────────────────────────────────────────────────────────
+function exportDesign() {
+    if (!currentDesign) return;
+    var data = JSON.stringify({
+        lumins_design: currentDesign,
+        exported: new Date().toISOString(),
+        note: "Concept design by Lumin — engineering intelligence created by Siya"
+    }, null, 2);
+    var blob = new Blob([data], {type:"application/json"});
+    var url  = URL.createObjectURL(blob);
+    var a    = document.createElement("a");
+    a.href = url; a.download = (currentDesign.name||"lumin_design").replace(/\s+/g,"_")+".json";
+    a.click(); URL.revokeObjectURL(url);
+}
+
+// ── INVENTIONS PANEL ──────────────────────────────────────────────────────
+function openInventions() {
+    var panel = document.getElementById("inventions-panel");
+    var list  = document.getElementById("inv-list");
+    var empty = document.getElementById("inv-empty");
+    list.innerHTML = "";
+    var invs = getInventions();
+    if (invs.length === 0) { empty.style.display="block"; }
+    else {
+        empty.style.display="none";
+        invs.forEach(function(inv) {
+            var card = document.createElement("div");
+            card.className = "inv-card";
+            var d = new Date(inv.date);
+            var dateStr = d.toLocaleDateString("en-GB", {year:"numeric",month:"long",day:"numeric"});
+            card.innerHTML = '<div class="inv-card-name">'+inv.name+'</div>' +
+                '<div class="inv-card-meta">'+inv.type+'  ·  DREAMED '+dateStr+'</div>' +
+                '<div class="inv-card-desc">'+inv.description+'</div>';
+            card.onclick = function() {
+                closeInventions();
+                buildConstruct(inv.shapeKey||"generic", inv.name, inv.type, inv.description, true);
+            };
+            list.appendChild(card);
+        });
+    }
+    panel.classList.add("open");
+}
+
+function closeInventions() {
+    document.getElementById("inventions-panel").classList.remove("open");
+}
+
+// ── SETUP ─────────────────────────────────────────────────────────────────
+function initLab() {
+    var nameVal = document.getElementById("s-name").value.trim();
+    var keyVal  = document.getElementById("s-key").value.trim();
+    var errEl   = document.getElementById("setup-err");
+
+    if (!nameVal) { errEl.textContent = "Please enter your name."; return; }
+    if (!keyVal)  { errEl.textContent = "Please enter your Groq API key."; return; }
+
+    userName = nameVal;
+    apiKey   = keyVal;
+
+    document.getElementById("setup-overlay").style.display = "none";
+    initThree();
+    addTermLine("DESIGN LAB INITIALISED", true);
+    addTermLine("OPERATOR: " + userName.toUpperCase());
+    addTermLine("LUMIN READY TO DESIGN");
+    addTermLine("PRESS DREAM TO BEGIN");
+
+    document.getElementById("design-input").addEventListener("keydown", function(e) {
+        if (e.key==="Enter") requestDesign();
+    });
+}
+</script>
+</body>
+</html>
