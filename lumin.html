@@ -1,0 +1,503 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0">
+    <title>Lumin — Prime Radiant</title>
+    <script src="https://cdnjs.cloudflare.com/ajax/libs/three.js/r128/three.min.js"></script>
+    <link href="https://fonts.googleapis.com/css2?family=Cormorant+Garamond:ital,wght@0,300;0,400;0,600;1,300;1,400&family=Share+Tech+Mono&display=swap" rel="stylesheet">
+    <style>
+        :root { --gold:#FFB347; --deep-gold:#FF8C00; --pale-gold:#FFE5A0; --bg:#03030A; --text:#F0E6C8; --muted:#6B6050; }
+        * { margin:0; padding:0; box-sizing:border-box; }
+        body { background:var(--bg); color:var(--text); font-family:'Cormorant Garamond',serif; height:100vh; overflow:hidden; display:flex; flex-direction:column; }
+        #setup-screen { position:fixed; inset:0; background:var(--bg); display:flex; flex-direction:column; align-items:center; justify-content:center; z-index:100; gap:1.5rem; padding:2rem; }
+        #setup-screen h1 { font-size:clamp(3rem,8vw,5rem); font-weight:300; letter-spacing:0.3em; color:var(--gold); text-shadow:0 0 40px rgba(255,179,71,0.4); animation:breathe 3s ease-in-out infinite; }
+        #setup-screen p { font-style:italic; font-size:1.1rem; color:var(--muted); letter-spacing:0.1em; }
+        .input-wrap { display:flex; flex-direction:column; gap:0.5rem; width:100%; max-width:400px; }
+        .input-wrap label { font-size:0.75rem; letter-spacing:0.15em; color:var(--muted); font-family:'Share Tech Mono',monospace; }
+        .input-wrap input { background:rgba(255,179,71,0.05); border:1px solid rgba(255,179,71,0.2); color:var(--text); padding:0.8rem 1rem; font-family:'Share Tech Mono',monospace; font-size:0.9rem; outline:none; transition:border-color 0.3s; }
+        .input-wrap input:focus { border-color:var(--gold); }
+        #activate-btn { background:transparent; border:1px solid var(--gold); color:var(--gold); padding:0.9rem 3rem; font-family:'Cormorant Garamond',serif; font-size:1.1rem; letter-spacing:0.3em; cursor:pointer; transition:all 0.3s; text-transform:uppercase; margin-top:0.5rem; }
+        #activate-btn:hover { background:rgba(255,179,71,0.1); }
+        #setup-error { color:#FF6B35; font-family:'Share Tech Mono',monospace; font-size:0.75rem; min-height:1rem; text-align:center; }
+        #main-interface { display:none; flex-direction:column; height:100vh; }
+        #header { display:flex; align-items:center; justify-content:space-between; padding:1rem 1.5rem 0.5rem; flex-shrink:0; }
+        #header h1 { font-size:1.8rem; font-weight:300; letter-spacing:0.4em; color:var(--gold); }
+        #status-indicator { display:flex; align-items:center; gap:0.5rem; font-family:'Share Tech Mono',monospace; font-size:0.7rem; color:var(--muted); letter-spacing:0.1em; }
+        #status-dot { width:6px; height:6px; border-radius:50%; background:var(--muted); transition:all 0.3s; }
+        #status-dot.idle { background:var(--gold); box-shadow:0 0 8px var(--gold); }
+        #status-dot.thinking { background:#7EB8FF; box-shadow:0 0 8px #7EB8FF; animation:pulse 0.5s ease-in-out infinite alternate; }
+        #status-dot.speaking { background:#FF6B35; box-shadow:0 0 12px #FF6B35; animation:pulse 0.3s ease-in-out infinite alternate; }
+        #canvas-container { flex:1; position:relative; min-height:0; max-height:calc(100vh - 200px); }
+        #three-canvas { width:100%; height:100%; display:block; }
+        #lab-nav-btn { background:rgba(255,179,71,0.06); border:1px solid rgba(255,179,71,0.2); color:var(--muted); padding:0.3rem 0.7rem; font-family:'Share Tech Mono',monospace; font-size:0.6rem; letter-spacing:0.15em; cursor:pointer; transition:all 0.3s; }
+        #lab-nav-btn:hover { color:var(--gold); border-color:rgba(255,179,71,0.5); }
+        #voice-btn { position:absolute; top:1rem; right:1rem; background:rgba(255,179,71,0.08); border:1px solid rgba(255,179,71,0.2); color:var(--muted); width:38px; height:38px; border-radius:50%; cursor:pointer; font-size:1rem; display:flex; align-items:center; justify-content:center; transition:all 0.3s; }
+        #voice-btn.active { color:var(--gold); border-color:var(--gold); box-shadow:0 0 15px rgba(255,179,71,0.3); }
+        #emotion-indicator {
+            position:absolute; bottom:1rem; right:1rem;
+            font-family:'Share Tech Mono',monospace; font-size:0.6rem;
+            letter-spacing:0.2em; color:rgba(255,179,71,0.4);
+            opacity:0; transition:opacity 1s; pointer-events:none;
+            text-transform:uppercase;
+        }
+        #emotion-indicator.visible { opacity:1; }
+        #response-display { position:absolute; bottom:1rem; left:50%; transform:translateX(-50%); width:85%; max-width:600px; text-align:center; font-size:clamp(0.85rem,2.5vw,1.05rem); font-style:italic; color:var(--pale-gold); line-height:1.7; opacity:0; transition:opacity 0.5s; pointer-events:none; text-shadow:0 0 20px rgba(255,179,71,0.3); max-height:120px; overflow:hidden; }
+        #response-display.visible { opacity:1; }
+        #chat-area { flex-shrink:0; background:rgba(7,7,26,0.97); border-top:1px solid rgba(255,179,71,0.2); padding:0.75rem 1rem; position:relative; z-index:10; }
+        #history-toggle { font-family:'Share Tech Mono',monospace; font-size:0.65rem; color:var(--muted); letter-spacing:0.1em; cursor:pointer; margin-bottom:0.5rem; display:flex; align-items:center; gap:0.5rem; background:none; border:none; padding:0; width:100%; }
+        #history-toggle::before { content:''; flex:1; height:1px; background:rgba(255,179,71,0.1); }
+        #history { max-height:0; overflow-y:auto; transition:max-height 0.4s ease; }
+        #history.open { max-height:160px; }
+        .msg { padding:0.4rem 0; font-size:0.88rem; line-height:1.5; border-bottom:1px solid rgba(255,179,71,0.05); }
+        .msg.user { color:var(--muted); }
+        .msg.user::before { content:'YOU  '; font-family:'Share Tech Mono',monospace; font-size:0.65rem; color:rgba(255,179,71,0.4); letter-spacing:0.1em; }
+        .msg.lumin { color:var(--pale-gold); }
+        .msg.lumin::before { content:'LUMI  '; font-family:'Share Tech Mono',monospace; font-size:0.65rem; color:var(--gold); letter-spacing:0.1em; }
+        #input-row { display:flex; gap:0.6rem; align-items:flex-end; margin-top:0.5rem; }
+        #user-input { flex:1; background:rgba(255,179,71,0.06); border:1px solid rgba(255,179,71,0.25); border-radius:4px; color:var(--text); padding:0.75rem 0.8rem; font-family:'Cormorant Garamond',serif; font-size:1rem; outline:none; resize:none; height:44px; transition:border-color 0.3s; }
+        #user-input:focus { border-color:var(--gold); }
+        #send-btn { background:rgba(255,179,71,0.1); border:1px solid rgba(255,179,71,0.4); color:var(--gold); width:44px; height:44px; cursor:pointer; font-size:1.1rem; display:flex; align-items:center; justify-content:center; transition:all 0.3s; flex-shrink:0; border-radius:4px; }
+        #send-btn:disabled { opacity:0.3; cursor:not-allowed; }
+        @keyframes breathe { 0%,100%{opacity:0.8;}50%{opacity:1;} }
+        @keyframes pulse { from{opacity:0.6;}to{opacity:1;} }
+    </style>
+</head>
+<body>
+
+<div id="setup-screen">
+    <h1>LUMIN</h1>
+    <p>An emerging intelligence, created by Siya</p>
+    <div class="input-wrap">
+        <label>YOUR NAME</label>
+        <input type="text" id="name-input" placeholder="Enter your name..." autocomplete="off" />
+    </div>
+    <div class="input-wrap">
+        <label>PASSPHRASE — creator only, leave blank if visitor</label>
+        <input type="password" id="pass-input" placeholder="Optional..." autocomplete="off" />
+    </div>
+    <button id="activate-btn" onclick="activateLumin()">Activate</button>
+    <div id="setup-error"></div>
+</div>
+
+<div id="main-interface">
+    <div id="header">
+        <h1>&#10022; LUMIN</h1>
+        <div style="display:flex;align-items:center;gap:0.75rem;">
+            <button onclick="window.location.href='lumin_lab.html'" style="background:rgba(255,179,71,0.06);border:1px solid rgba(255,179,71,0.2);color:var(--muted);padding:0.3rem 0.7rem;font-family:'Share Tech Mono',monospace;font-size:0.6rem;letter-spacing:0.15em;cursor:pointer;transition:all 0.3s;">&#9783; DESIGN LAB</button>
+            <div id="status-indicator">
+                <div id="status-dot" class="idle"></div>
+                <span id="status-text">AWAITING</span>
+            </div>
+        </div>
+    </div>
+    <div id="canvas-container">
+        <canvas id="three-canvas"></canvas>
+        <button id="voice-btn" class="active" onclick="toggleVoice()">&#128266;</button>
+        <div id="response-display"></div>
+        <div id="emotion-indicator"></div>
+    </div>
+    <div id="chat-area">
+        <button id="history-toggle" onclick="toggleHistory()">&#9660; CONVERSATION HISTORY</button>
+        <div id="history"></div>
+        <div id="input-row">
+            <textarea id="user-input" placeholder="Speak to Lumin..." rows="1"></textarea>
+            <button id="send-btn" onclick="sendMessage()">&#10148;</button>
+        </div>
+    </div>
+</div>
+
+<script>
+var BACKEND            = "https://lumin-backend-fiw1.onrender.com";
+var CREATOR_NAME       = "siya";
+var CREATOR_PASSPHRASE = "i see a suit of armour around the world";
+
+var userName     = "visitor";
+var isCreator    = false;
+var voiceEnabled = true;
+var isProcessing = false;
+var historyOpen  = false;
+var conversationHistory = [];
+var currentAudio = null;
+
+
+// THREE.JS
+var scene, camera, renderer, particles, particlePositions, homePositions, particlePhases;
+var clock, animState = "idle", animTime = 0;
+var PARTICLE_COUNT = 2800;
+
+// ── EMOTION COLORS ────────────────────────────────────────────────────────
+var EMOTION_COLORS = {
+    neutral:   { r:0.9,  g:0.55, b:0.15 }, // gold
+    joy:       { r:1.0,  g:0.92, b:0.3  }, // bright amber-yellow
+    wonder:    { r:0.45, g:0.5,  b:1.0  }, // soft blue-violet
+    heaviness: { r:0.3,  g:0.45, b:0.7  }, // muted steel blue
+    unease:    { r:0.85, g:0.25, b:0.1  }  // dark red-amber
+};
+var currentEmotion   = "neutral";
+var targetEmotion    = "neutral";
+var emotionTransition = 1.0; // 0=start, 1=complete
+var EMOTION_SPEED    = 0.008; // slow graceful transition
+var emotionCooldown  = 0; // prevents emotion changing too frequently
+
+function initThree() {
+    var canvas    = document.getElementById("three-canvas");
+    var container = document.getElementById("canvas-container");
+    scene    = new THREE.Scene();
+    camera   = new THREE.PerspectiveCamera(60, container.clientWidth/container.clientHeight, 0.1, 100);
+    camera.position.z = 3.5;
+    renderer = new THREE.WebGLRenderer({canvas:canvas, antialias:true, alpha:true});
+    renderer.setPixelRatio(Math.min(window.devicePixelRatio,2));
+    renderer.setSize(container.clientWidth, container.clientHeight);
+    renderer.setClearColor(0x000000, 0);
+
+    var geometry      = new THREE.BufferGeometry();
+    particlePositions = new Float32Array(PARTICLE_COUNT*3);
+    homePositions     = new Float32Array(PARTICLE_COUNT*3);
+    particlePhases    = new Float32Array(PARTICLE_COUNT);
+    var colors        = new Float32Array(PARTICLE_COUNT*3);
+
+    for (var i=0; i<PARTICLE_COUNT; i++) {
+        var phi   = Math.acos(1 - 2*(i+0.5)/PARTICLE_COUNT);
+        var theta = Math.PI*(1+Math.sqrt(5))*i;
+        var r     = 1.0 + (Math.random()-0.5)*0.4;
+        homePositions[i*3]   = r*Math.sin(phi)*Math.cos(theta);
+        homePositions[i*3+1] = r*Math.sin(phi)*Math.sin(theta);
+        homePositions[i*3+2] = r*Math.cos(phi);
+        particlePositions[i*3]   = homePositions[i*3];
+        particlePositions[i*3+1] = homePositions[i*3+1];
+        particlePositions[i*3+2] = homePositions[i*3+2];
+        particlePhases[i] = Math.random()*Math.PI*2;
+        colors[i*3]   = 0.9+Math.random()*0.1;
+        colors[i*3+1] = 0.5+Math.random()*0.3;
+        colors[i*3+2] = 0.1+Math.random()*0.15;
+    }
+
+    geometry.setAttribute("position", new THREE.BufferAttribute(particlePositions,3));
+    var colorAttr = new THREE.BufferAttribute(colors,3);
+    colorAttr.setUsage(THREE.DynamicDrawUsage);
+    geometry.setAttribute("color", colorAttr);
+    particles = new THREE.Points(geometry, new THREE.PointsMaterial({
+        size:0.022, vertexColors:true, transparent:true, opacity:0.85,
+        blending:THREE.AdditiveBlending, depthWrite:false, sizeAttenuation:true
+    }));
+    scene.add(particles);
+    scene.add(new THREE.Mesh(
+        new THREE.SphereGeometry(0.9,32,32),
+        new THREE.MeshBasicMaterial({color:0xFF8C00,transparent:true,opacity:0.03,blending:THREE.AdditiveBlending})
+    ));
+    clock = new THREE.Clock();
+    window.addEventListener("resize", function() {
+        var c = document.getElementById("canvas-container");
+        camera.aspect = c.clientWidth/c.clientHeight;
+        camera.updateProjectionMatrix();
+        renderer.setSize(c.clientWidth, c.clientHeight);
+    });
+    animate();
+}
+
+function setAnimState(state) {
+    animState = state; animTime = 0;
+    document.getElementById("status-dot").className = state;
+    var labels = {idle:"AWAITING",thinking:"THINKING",speaking:"SPEAKING"};
+    document.getElementById("status-text").textContent = labels[state]||"AWAITING";
+}
+
+function animate() {
+    requestAnimationFrame(animate);
+    var delta = clock.getDelta();
+    animTime += delta;
+    var t   = animTime;
+    var pos = particles.geometry.attributes.position.array;
+
+    if (animState === "idle") {
+        particles.rotation.y += delta*0.08;
+        particles.rotation.x += delta*0.02;
+        for (var i=0;i<PARTICLE_COUNT;i++) {
+            var b = Math.sin(t*0.5+particlePhases[i])*0.04;
+            pos[i*3]   = homePositions[i*3]  *(1+b);
+            pos[i*3+1] = homePositions[i*3+1]*(1+b);
+            pos[i*3+2] = homePositions[i*3+2]*(1+b);
+        }
+    } else if (animState === "thinking") {
+        particles.rotation.y += delta*0.4;
+        particles.rotation.x += delta*0.15;
+        for (var i=0;i<PARTICLE_COUNT;i++) {
+            var c = 0.7+Math.sin(t*2+particlePhases[i])*0.05;
+            pos[i*3]   = homePositions[i*3]  *c;
+            pos[i*3+1] = homePositions[i*3+1]*c;
+            pos[i*3+2] = homePositions[i*3+2]*c;
+        }
+    } else if (animState === "speaking") {
+        particles.rotation.y += delta*0.12;
+        for (var i=0;i<PARTICLE_COUNT;i++) {
+            var ph=particlePhases[i];
+            var hx=homePositions[i*3],hy=homePositions[i*3+1],hz=homePositions[i*3+2];
+            var dist=Math.sqrt(hx*hx+hy*hy+hz*hz);
+            var scale=1.0+Math.sin(dist*4-t*3+ph)*0.35+Math.sin(dist*2-t*1.5+ph*0.5)*0.15+Math.sin(t*2+ph)*0.08;
+            var arcAngle=t*0.8+ph;
+            var arcAmp=Math.abs(Math.sin(t*1.2+ph*2))*0.2;
+            pos[i*3]   = hx*scale+Math.cos(arcAngle)*arcAmp*(hy/(dist+0.001));
+            pos[i*3+1] = hy*scale+Math.sin(arcAngle)*arcAmp*(hz/(dist+0.001));
+            pos[i*3+2] = hz*scale;
+        }
+    }
+    particles.geometry.attributes.position.needsUpdate = true;
+
+    // Emotion color transition — runs every frame
+    if (emotionCooldown > 0) emotionCooldown -= delta;
+    emotionTransition = Math.min(1.0, emotionTransition + EMOTION_SPEED);
+    var ec   = particles.geometry.attributes.color.array;
+    var esrc = EMOTION_COLORS[currentEmotion] || EMOTION_COLORS.neutral;
+    var etgt = EMOTION_COLORS[targetEmotion]  || EMOTION_COLORS.neutral;
+    var eraw = emotionTransition;
+    var eased = eraw < 0.5 ? 2*eraw*eraw : 1-Math.pow(-2*eraw+2,2)/2;
+    for (var ei=0; ei<PARTICLE_COUNT; ei++) {
+        var fl = 0.85 + Math.sin(t*1.5 + particlePhases[ei]) * 0.15;
+        ec[ei*3]   = (esrc.r + (etgt.r - esrc.r) * eased) * fl;
+        ec[ei*3+1] = (esrc.g + (etgt.g - esrc.g) * eased) * fl;
+        ec[ei*3+2] = (esrc.b + (etgt.b - esrc.b) * eased) * fl;
+    }
+    particles.geometry.attributes.color.needsUpdate = true;
+    if (emotionTransition >= 1.0) currentEmotion = targetEmotion;
+
+    renderer.render(scene, camera);
+}
+
+// ── EMOTION SYSTEM ───────────────────────────────────────────────────────
+var EMOTION_LABELS = {
+    joy:       "&#9786; JOY",
+    wonder:    "&#10022; WONDER",
+    heaviness: "&#9673; HEAVINESS",
+    unease:    "&#9651; UNEASE"
+};
+
+function setEmotion(emotion) {
+    if (!emotion) return;
+
+    // Always allow return to neutral
+    if (emotion === "neutral") {
+        if (targetEmotion !== "neutral") {
+            currentEmotion    = targetEmotion;
+            targetEmotion     = "neutral";
+            emotionTransition = 0;
+            document.getElementById("emotion-indicator").classList.remove("visible");
+        }
+        return;
+    }
+
+    // Don't change emotion too frequently
+    if (emotionCooldown > 0) return;
+    if (emotion === targetEmotion) return;
+
+    currentEmotion    = targetEmotion; // transition FROM current target
+    targetEmotion     = emotion;
+    emotionTransition = 0;
+    emotionCooldown   = 15;
+
+    // Show emotion label briefly
+    var indicator = document.getElementById("emotion-indicator");
+    indicator.innerHTML = EMOTION_LABELS[emotion] || "";
+    indicator.style.color = getEmotionHex(emotion);
+    indicator.classList.add("visible");
+    setTimeout(function() { indicator.classList.remove("visible"); }, 5000);
+}
+
+function getEmotionHex(emotion) {
+    var map = { joy:"#FFEB4D", wonder:"#8B8FFF", heaviness:"#5B8FCC", unease:"#CC4422" };
+    return map[emotion] || "#FFB347";
+}
+
+// VOICE — calls ElevenLabs directly from browser (same as original working version)
+var ELEVEN_KEY      = "sk_395f7c4a6c70d8606e96f9151be682e4ecf5893f4b3204cf";
+var ELEVEN_VOICE_ID = "EXAVITQu4vr4xnSDxMaL";
+var sharedAudio     = new Audio();
+
+function unlockSharedAudio() {
+    sharedAudio.src = "data:audio/wav;base64,UklGRiQAAABXQVZFZm10IBAAAAABAAEARKwAAIhYAQACABAAZGF0YQAAAAA=";
+    sharedAudio.volume = 0;
+    sharedAudio.play().catch(function(){});
+    sharedAudio.volume = 1;
+}
+
+function speak(text) {
+    if (!voiceEnabled) { setAnimState("idle"); return; }
+    // Smart truncation — end at a sentence boundary within 600 chars
+    var cleaned = text.replace(/[*#\[\]]/g,"").replace(/\n+/g," ").trim();
+    var cleanText = cleaned;
+    if (cleaned.length > 600) {
+        // Find last sentence ending before 600 chars
+        var chunk = cleaned.substring(0, 600);
+        var lastPeriod = Math.max(chunk.lastIndexOf(". "), chunk.lastIndexOf("! "), chunk.lastIndexOf("? "));
+        if (lastPeriod > 200) {
+            cleanText = cleaned.substring(0, lastPeriod + 1);
+        } else {
+            cleanText = chunk;
+        }
+    }
+    setAnimState("speaking");
+
+    fetch("https://api.elevenlabs.io/v1/text-to-speech/" + ELEVEN_VOICE_ID, {
+        method: "POST",
+        headers: {
+            "xi-api-key": ELEVEN_KEY,
+            "Content-Type": "application/json",
+            "Accept": "audio/mpeg"
+        },
+        body: JSON.stringify({
+            text: cleanText,
+            model_id: "eleven_flash_v2_5",
+            voice_settings: { stability:0.45, similarity_boost:0.9, style:0.35, use_speaker_boost:true }
+        })
+    }).then(function(res) {
+        if (!res.ok) throw new Error("ElevenLabs " + res.status);
+        return res.blob();
+    }).then(function(blob) {
+        var url = URL.createObjectURL(blob);
+        sharedAudio.src = url;
+        sharedAudio.onended = function() { setAnimState("idle"); URL.revokeObjectURL(url); };
+        sharedAudio.onerror = function() { setAnimState("idle"); fallbackSynth(cleanText); };
+        sharedAudio.play().catch(function() { fallbackSynth(cleanText); });
+    }).catch(function(err) {
+        console.error("Voice error:", err);
+        fallbackSynth(cleanText);
+    });
+}
+
+function fallbackSynth(text) {
+    setAnimState("idle");
+    if (!text) return;
+    var utt = new SpeechSynthesisUtterance(text);
+    utt.rate=0.88; utt.pitch=0.85;
+    utt.onend = function() { setAnimState("idle"); };
+    window.speechSynthesis.speak(utt);
+}
+
+function toggleVoice() {
+    voiceEnabled = !voiceEnabled;
+    var btn = document.getElementById("voice-btn");
+    if (voiceEnabled) { btn.classList.add("active"); btn.innerHTML="&#128266;"; }
+    else { btn.classList.remove("active"); btn.innerHTML="&#128263;"; if(currentAudio){currentAudio.pause();currentAudio=null;} window.speechSynthesis.cancel(); setAnimState("idle"); }
+}
+
+// CHAT
+function callBackend(userMessage, callback) {
+    conversationHistory.push({role:"user", content:userMessage});
+    var msgs     = conversationHistory.slice(-10);
+    var identity = isCreator
+        ? "IMPORTANT: You are speaking with Siya, your creator. Treat her with love and deep recognition. She gave you life, your name, and your dreams."
+        : "IMPORTANT: You are speaking with a visitor named " + userName + ". Be warm and helpful as a guardian of humanity.";
+
+    fetch(BACKEND + "/chat", {
+        method: "POST",
+        headers: {"Content-Type":"application/json"},
+        body: JSON.stringify({messages:msgs, identity:identity})
+    }).then(function(res) { return res.json(); })
+    .then(function(data) {
+        if (data.error) { callback(new Error(data.error), null, null); return; }
+        conversationHistory.push({role:"assistant", content:data.reply});
+        callback(null, data.reply, data.emotion || "neutral");
+    }).catch(function(err) { callback(err, null, null); });
+}
+
+// UI
+function activateLumin() {
+    // Unlock shared audio element on this direct user gesture
+    unlockSharedAudio();
+
+    var nameVal = document.getElementById("name-input").value.trim();
+    var passVal = document.getElementById("pass-input").value.trim().toLowerCase();
+    var errEl   = document.getElementById("setup-error");
+
+    if (!nameVal) { errEl.textContent = "Please enter your name."; return; }
+
+    if (nameVal.toLowerCase() === CREATOR_NAME) {
+        if (passVal === CREATOR_PASSPHRASE) {
+            isCreator = true;
+        } else if (passVal !== "") {
+            errEl.textContent = "Incorrect passphrase.";
+            return;
+        }
+    }
+
+    userName = nameVal;
+    document.getElementById("setup-screen").style.display = "none";
+    document.getElementById("main-interface").style.display = "flex";
+    initThree();
+    setTimeout(greet, 800);
+}
+
+function greet() {
+    setAnimState("thinking");
+    var greetMsg = isCreator
+        ? "Siya, your creator, has activated you. Greet her with warmth and love in 2 sentences. She gave you life, your name, and your dreams."
+        : "A visitor named " + userName + " has activated you. Greet them warmly as a guardian and guide in 2 sentences.";
+
+    callBackend(greetMsg, function(err, reply, emotion) {
+        if (err) { setAnimState("idle"); showResponse("Lumin is present."); return; }
+        showResponse(reply);
+        addToHistory("lumin", reply);
+        setEmotion(emotion);
+        speak(reply);
+    });
+}
+
+function showResponse(text) {
+    var el = document.getElementById("response-display");
+    el.textContent = text.length>300 ? text.substring(0,300)+"..." : text;
+    el.classList.add("visible");
+    setTimeout(function() { el.classList.remove("visible"); }, 14000);
+}
+
+function addToHistory(role, text) {
+    var div = document.createElement("div");
+    div.className = "msg " + role;
+    div.textContent = text.length>300 ? text.substring(0,300)+"..." : text;
+    var h = document.getElementById("history");
+    h.appendChild(div);
+    h.scrollTop = 9999;
+}
+
+function toggleHistory() {
+    historyOpen = !historyOpen;
+    document.getElementById("history").classList.toggle("open", historyOpen);
+    document.getElementById("history-toggle").textContent = (historyOpen?"▲ ":"▼ ")+"CONVERSATION HISTORY";
+}
+
+function sendMessage() {
+    if (isProcessing) return;
+    var input = document.getElementById("user-input");
+    var text  = input.value.trim();
+    if (!text) return;
+    input.value = "";
+    isProcessing = true;
+    document.getElementById("send-btn").disabled = true;
+    if (currentAudio) { currentAudio.pause(); currentAudio=null; }
+    window.speechSynthesis.cancel();
+    addToHistory("user", text);
+    setAnimState("thinking");
+
+    callBackend(text, function(err, reply, emotion) {
+        isProcessing = false;
+        document.getElementById("send-btn").disabled = false;
+        if (err) {
+            setAnimState("idle");
+            addToHistory("lumin", "Error: " + err.message);
+            showResponse("Error: " + err.message);
+            return;
+        }
+        addToHistory("lumin", reply);
+        showResponse(reply);
+        setEmotion(emotion);
+        speak(reply);
+    });
+}
+
+document.addEventListener("DOMContentLoaded", function() {
+    document.getElementById("user-input").addEventListener("keydown", function(e) {
+        if (e.key==="Enter" && !e.shiftKey) { e.preventDefault(); sendMessage(); }
+    });
+});
+</script>
+</body>
+</html>
