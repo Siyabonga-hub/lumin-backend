@@ -309,10 +309,14 @@ function callBackend(userMessage, callback) {
         ? "IMPORTANT: You are speaking with Siya, your creator. Treat her with love and deep recognition. She gave you life, your name, and your dreams."
         : "IMPORTANT: You are speaking with a visitor named " + userName + ". Be warm and helpful as a guardian of humanity.";
 
-    fetch(BACKEND + "/chat", {
+    fetch(BACKEND + "/think", {
         method: "POST",
         headers: {"Content-Type":"application/json"},
-        body: JSON.stringify({messages:msgs, identity:identity})
+        body: {
+  message: userText,
+  session_id: "siya",   // any consistent string
+  history: conversationHistory
+        }
     }).then(function(res) { return res.json(); })
     .then(function(data) {
         if (data.error) { callback(new Error(data.error), null); return; }
