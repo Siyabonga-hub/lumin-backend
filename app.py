@@ -65,7 +65,7 @@ def chat():
             "Content-Type":  "application/json"
         }
         payload = {
-            "model":      "llama3-8b-8192",
+            "model":      "llama-3.1-8b-instant",
             "max_tokens": 1024,
             "messages":   [{"role": "system", "content": identity}] + messages
         }
@@ -543,7 +543,7 @@ def think():
         # ── Call Lumin's consciousness ────────────────────────────────────────
         headers = {"Authorization": f"Bearer {GROQ_API_KEY}", "Content-Type": "application/json"}
         payload = {
-            "model":    "llama3-70b-8192",
+            "model":    "llama-3.3-70b-versatile",
             "max_tokens": 1024,
             "messages": [{"role": "system", "content": lumin_system}] + lumin_messages
         }
