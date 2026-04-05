@@ -22,7 +22,7 @@ def cors_headers(response):
 app.after_request(cors_headers)
 
 # ── GROQ HELPER ────────────────────────────────────────────────────────────────
-def call_groq(system_prompt, user_message, model="llama3-8b-8192", max_tokens=800):
+def call_groq(system_prompt, user_message, model="llama-3.1-8b-instant", max_tokens=800):
     """Call Groq API with a system prompt and user message. Returns text reply."""
     headers = {
         "Authorization": f"Bearer {GROQ_API_KEY}",
