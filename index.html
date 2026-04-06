@@ -326,22 +326,57 @@ function callBackend(userMessage, callback) {
     conversationHistory.push({role:"user", content:userMessage});
     var msgs = conversationHistory.slice(-10);
 
-    fetch(BACKEND + "/think", {
-        method: "POST",
-        headers: {"Content-Type":"application/json"},
-        body: JSON.stringify({
-            message: userMessage,
-            session_id: userName,
-            history: msgs
-        })
-    }).then(function(res) { return res.json(); })
-    .then(function(data) {
-        if (data.error) { callback(new Error(data.error), null); return; }
-        var reply = data.response || data.reply || "...";
-        conversationHistory.push({role:"assistant", content:reply});
-        callback(null, reply);
-    }).catch(function(err) { callback(err, null); });
-}
+    const SESSION_ID = sessionStorage.getItem("lumin_session") || (() => {
+  const id = "session_" + Date.now();
+  sessionStorage.setItem("lumin_session", id);
+  return id;
+})();
+
+// 2. You need to track conversation history
+let conversationHistory = [];
+
+// 3. Main send function — replace your existing fetch
+async function sendMessage(userMessage) {
+  // Add user message to history
+  conversationHistory.push({
+    role: "user",
+    content: userMessage
+  });
+
+  try {
+    const response = await fetch("https://your-backend.onrender.com/think", {
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({
+        message: userMessage,
+        session_id: SESSION_ID,
+        history: conversationHistory
+      })
+    });
+
+    const data = await response.json();
+    const luminResponse = data.response;
+
+    // Add Lumin's response to history
+    conversationHistory.push({
+      role: "assistant",
+      content: luminResponse
+    });
+
+    // Optional: log what PSYCHE detected (remove in production)
+    if (data.debug) {
+      console.log("[PSYCHE]", data.debug.psyche_emotion, "→", data.debug.psyche_urgency);
+      console.log("[MEMORIA]", data.debug.memoria_summary);
+    }
+
+    return luminResponse;
+
+  } catch (error) {
+    console.error("Lumin connection error:", error);
+    return "I'm here. Give me a moment...";
+  }
+    }
+      
 
 // UI
 function activateLumin() {
