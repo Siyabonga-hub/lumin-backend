@@ -255,7 +255,7 @@ def dream_consolidate(session_id: str) -> None:
 
     try:
         response = client.chat.completions.create(
-            model="llama3-8b-8192",  # Lighter model for background work
+            model="llama-3.1-8b-instant",  # Lighter model for background work
             messages=[
                 {
                     "role": "system",
@@ -370,7 +370,7 @@ def call_lumin(system_prompt: str, history: list, message: str) -> str:
     messages.append({"role": "user", "content": message})
 
     response = client.chat.completions.create(
-        model="llama3-70b-8192",
+        model="llama-3.3-70b-versatile",
         messages=messages,
         temperature=0.75,
         max_tokens=600
@@ -482,7 +482,7 @@ def chat():
     messages.append({"role": "user", "content": message})
 
     response = client.chat.completions.create(
-        model="llama3-70b-8192",
+        model="llama-3.3-70b-versatile",
         messages=messages,
         temperature=0.75,
         max_tokens=600
@@ -509,7 +509,7 @@ def speak():
     ]
 
     response = client.chat.completions.create(
-        model="llama3-70b-8192",
+        model="llama-3.3-70b-versatile",
         messages=messages,
         temperature=0.75,
         max_tokens=150
