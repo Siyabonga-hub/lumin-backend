@@ -119,29 +119,40 @@ Format:
   "psyche_note": "..."
 }
 """
-
-
 def run_psyche(message: str, history: list, result_store: dict) -> None:
-    """
-    PSYCHE thread — reads emotional state before Lumin responds.
-    Maps to: KAIROS always-on proactive awareness.
-    """
     try:
-    raw = response.choices[0].message.content.strip()
-    clean = raw.removeprefix("```json").removeprefix("```").removesuffix("```").strip()
-    result_store["psyche"] = json.loads(clean)
-except Exception as e:
-    print(f"[PSYCHE ERROR] {e}")
-    result_store["psyche"] = {
-        "detected_emotion": "unknown",
-        "secondary_emotion": "",
-        "underlying_need": "presence",
-        "urgency": "calm",
-        "suggested_tone": "warm and attentive",
-        "psyche_note": "Read carefully. Be fully present."
-    }
+        recent = history[-6:] if len(history) > 6 else history
+        response = client.chat.completions.create(
+            model="llama-3.3-70b-versatile",
+            messages=[
+                {"role": "system", "content": PSYCHE_SYSTEM},
+                {
+                    "role": "user",
+                    "content": (
+                        f"Recent conversation:\n{json.dumps(recent, indent=2)}\n\n"
+                        f"Latest message from human: \"{message}\"\n\n"
+                        f"What is this person feeling and needing right now?"
+                    )
+                }
+            ],
+            temperature=0.5,
+            max_tokens=300
+        )
+        raw = response.choices[0].message.content.strip()
+        clean = raw.removeprefix("```json").removeprefix("```").removesuffix("```").strip()
+        result_store["psyche"] = json.loads(clean)
+    except Exception as e:
+        print(f"[PSYCHE ERROR] {e}")
+        result_store["psyche"] = {
+            "detected_emotion": "unknown",
+            "secondary_emotion": "",
+            "underlying_need": "presence",
+            "urgency": "calm",
+            "suggested_tone": "warm and attentive",
+            "psyche_note": "Read carefully. Be fully present."
+        }
 
-    
+
         
 
 # ---------------------------------------------------------------------------
@@ -181,23 +192,37 @@ If nothing significant, return empty arrays and a short summary.
 
 
 def run_memoria(message: str, history: list, existing_memories: dict, result_store: dict) -> None:
-    """
-    MEMORIA thread — extracts and consolidates memories before Lumin responds.
-    Maps to: autoDream (ORIENT → GATHER → CONSOLIDATE) + extractMemories.
-    """
     try:
-    raw = response.choices[0].message.content.strip()
-    clean = raw.removeprefix("```json").removeprefix("```").removesuffix("```").strip()
-    result_store["memoria"] = json.loads(clean)
-except Exception as e:
-    print(f"[MEMORIA ERROR] {e}")
-    result_store["memoria"] = {
-        "remember": [],
-        "update": [],
-        "forget": [],
-        "summary": ""
-    }
-
+        recent = history[-10:] if len(history) > 10 else history
+        existing_summary = format_memories_for_prompt(existing_memories)
+        response = client.chat.completions.create(
+            model="llama-3.3-70b-versatile",
+            messages=[
+                {"role": "system", "content": MEMORIA_SYSTEM},
+                {
+                    "role": "user",
+                    "content": (
+                        f"Existing memories:\n{existing_summary}\n\n"
+                        f"Recent conversation:\n{json.dumps(recent, indent=2)}\n\n"
+                        f"Latest message: \"{message}\"\n\n"
+                        f"What should be remembered, updated, or forgotten?"
+                    )
+                }
+            ],
+            temperature=0.3,
+            max_tokens=500
+        )
+        raw = response.choices[0].message.content.strip()
+        clean = raw.removeprefix("```json").removeprefix("```").removesuffix("```").strip()
+        result_store["memoria"] = json.loads(clean)
+    except Exception as e:
+        print(f"[MEMORIA ERROR] {e}")
+        result_store["memoria"] = {
+            "remember": [],
+            "update": [],
+            "forget": [],
+            "summary": ""
+}
 
 # ---------------------------------------------------------------------------
 # DREAM CONSOLIDATION  (maps to autoDream background consolidation)
