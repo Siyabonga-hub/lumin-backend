@@ -147,7 +147,9 @@ def run_psyche(message: str, history: list, result_store: dict) -> None:
         )
 
         raw = response.choices[0].message.content.strip()
-        result_store["psyche"] = json.loads(raw)
+        # Strip markdown code fences if model wraps response
+clean = raw.strip().removeprefix("```json").removeprefix("```").removesuffix("```").strip()
+result_store["psyche"] = json.loads(clean)
 
     except Exception as e:
         print(f"[PSYCHE ERROR] {e}")
@@ -225,7 +227,8 @@ def run_memoria(message: str, history: list, existing_memories: dict, result_sto
         )
 
         raw = response.choices[0].message.content.strip()
-        result_store["memoria"] = json.loads(raw)
+        clean = raw.strip().removeprefix("```json").removeprefix("```").removesuffix("```").strip()
+result_store["memoria"] = json.loads(clean)
 
     except Exception as e:
         print(f"[MEMORIA ERROR] {e}")
